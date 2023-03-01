@@ -1,14 +1,13 @@
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use std::path::Path;
+#[cfg(target_os = "macos")]
 use std::{ffi::c_char, slice, str};
-
-use block::ConcreteBlock;
-use cocoa::base::{id, NO, YES};
-use objc::{
-    class,
-    declare::ClassDecl,
-    msg_send,
-    runtime::{Class, Object, Sel, BOOL},
-    sel, sel_impl,
-};
 use wry::{
     application::{
         dpi::PhysicalSize,
@@ -16,99 +15,138 @@ use wry::{
         event_loop::{ControlFlow, EventLoop},
         window::WindowBuilder,
     },
-    webview::{WebViewBuilder, WebviewExtMacOS},
+    webview::WebViewBuilder,
 };
 
-//====== NSURLProtocol Methods =========
+#[cfg(target_os = "macos")]
+use block::ConcreteBlock;
+#[cfg(target_os = "macos")]
+use cocoa::base::{id, NO, YES};
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use gtk::prelude::*;
+#[cfg(target_os = "macos")]
+use objc::{
+    class,
+    declare::ClassDecl,
+    msg_send,
+    runtime::{Class, Object, Sel, BOOL},
+    sel, sel_impl,
+};
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use tao::platform::unix::WindowExtUnix;
 
-extern "C" fn can_init_with_request(_this: &Class, _: Sel, request: id) -> BOOL {
-    //TODO: Add logic for tracking requests here
+#[cfg(target_os = "macos")]
+use wry::webview::WebviewExtMacOS;
 
-    //TODO: Check if request interception is enabled and exit early if not
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+fn setup() {}
+#[cfg(target_os = "macos")]
+fn setup() {
+    //====== NSURLProtocol Methods =========
 
-    unsafe {
-        let tagged: id = msg_send![class!(NSURLProtocol), propertyForKey:NSString::new("PageBrowseHandled") inRequest:request];
-        let tagged = NSString(tagged);
-        let tagged = tagged.to_str();
-        if tagged == "PageBrowseHandled" {
-            return NO;
+    extern "C" fn can_init_with_request(_this: &Class, _: Sel, request: id) -> BOOL {
+        //TODO: Add logic for tracking requests here
+
+        //TODO: Check if request interception is enabled and exit early if not
+
+        unsafe {
+            let tagged: id = msg_send![class!(NSURLProtocol), propertyForKey:NSString::new("PageBrowseHandled") inRequest:request];
+            let tagged = NSString(tagged);
+            let tagged = tagged.to_str();
+            if tagged == "PageBrowseHandled" {
+                return NO;
+            }
+        }
+        YES
+    }
+
+    extern "C" fn canonical_request_for_request(_this: &Class, _: Sel, request: id) -> id {
+        //TODO: Maybe add logic for modifying the request here
+        request
+    }
+
+    extern "C" fn start_loading(this: &mut Object, _: Sel) {
+        unsafe {
+            let request: &id = this.get_ivar::<id>("request");
+            let new_request: id = msg_send![*request, mutableCopy];
+
+            let _: () = msg_send![
+            class!(NSURLProtocol),
+            setProperty:NSString::new("PageBrowseHandled")
+            forKey:NSString::new("PageBrowseHandled")
+            inRequest:new_request
+            ];
+
+            let new_this: *mut Object = this;
+
+            //TODO: Maybe add logic for modifying the request here
+            //TODO: Add logic for stubbing (i.e blocking) the request here
+
+            let connection: id = msg_send![class!(NSURLConnection), connectionWithRequest:new_request delegate:new_this];
+
+            this.set_ivar("connection", connection);
+        };
+    }
+
+    extern "C" fn stop_loading(_this: &Object, _: Sel) {
+        //TODO: Maybe add some logic here for cleaning up the connection
+    }
+
+    extern "C" fn init_with_request(
+        this: &mut Object,
+        _: Sel,
+        request: id,
+        _cached_response: id,
+        client: id,
+    ) -> id {
+        unsafe { this.set_ivar("client", client) };
+        unsafe { this.set_ivar("request", request) };
+        let this: *mut Object = this;
+        this
+    }
+
+    //====== Connection Delegate Methods =========
+
+    extern "C" fn did_receive_response(this: &Object, _: Sel, _connection: id, response: id) {
+        unsafe {
+            let client: &id = this.get_ivar::<id>("client");
+            // I think cachePolicy:3 is never cache, but might be worth investigating
+            let _: () = msg_send![*client, URLProtocol:this didReceiveResponse: response cacheStoragePolicy:3];
         }
     }
-    YES
-}
 
-extern "C" fn canonical_request_for_request(_this: &Class, _: Sel, request: id) -> id {
-    //TODO: Maybe add logic for modifying the request here
-    request
-}
-
-extern "C" fn start_loading(this: &mut Object, _: Sel) {
-    unsafe {
-        let request: &id = this.get_ivar::<id>("request");
-        let new_request: id = msg_send![*request, mutableCopy];
-
-        let _: () = msg_send![
-        class!(NSURLProtocol),
-        setProperty:NSString::new("PageBrowseHandled")
-        forKey:NSString::new("PageBrowseHandled")
-        inRequest:new_request
-        ];
-
-        let new_this: *mut Object = this;
-
-        //TODO: Maybe add logic for modifying the request here
-        //TODO: Add logic for stubbing (i.e blocking) the request here
-
-        let connection: id =
-            msg_send![class!(NSURLConnection), connectionWithRequest:new_request delegate:new_this];
-
-        this.set_ivar("connection", connection);
-    };
-}
-
-extern "C" fn stop_loading(_this: &Object, _: Sel) {
-    //TODO: Maybe add some logic here for cleaning up the connection
-}
-
-extern "C" fn init_with_request(
-    this: &mut Object,
-    _: Sel,
-    request: id,
-    _cached_response: id,
-    client: id,
-) -> id {
-    unsafe { this.set_ivar("client", client) };
-    unsafe { this.set_ivar("request", request) };
-    let this: *mut Object = this;
-    this
-}
-
-//====== Connection Delegate Methods =========
-
-extern "C" fn did_receive_response(this: &Object, _: Sel, _connection: id, response: id) {
-    unsafe {
-        let client: &id = this.get_ivar::<id>("client");
-        // I think cachePolicy:3 is never cache, but might be worth investigating
-        let _: () =
-            msg_send![*client, URLProtocol:this didReceiveResponse: response cacheStoragePolicy:3];
+    extern "C" fn did_receive_data(this: &Object, _: Sel, _connection: id, data: id) {
+        unsafe {
+            let client: &id = this.get_ivar::<id>("client");
+            let _: () = msg_send![*client, URLProtocol:this didLoadData: data];
+        }
     }
-}
 
-extern "C" fn did_receive_data(this: &Object, _: Sel, _connection: id, data: id) {
-    unsafe {
-        let client: &id = this.get_ivar::<id>("client");
-        let _: () = msg_send![*client, URLProtocol:this didLoadData: data];
+    extern "C" fn did_finish_loading(this: &Object, _: Sel, _connection: id) {
+        unsafe {
+            let client: &id = this.get_ivar::<id>("client");
+            let _: () = msg_send![*client, URLProtocolDidFinishLoading: this];
+        }
     }
-}
 
-extern "C" fn did_finish_loading(this: &Object, _: Sel, _connection: id) {
-    unsafe {
-        let client: &id = this.get_ivar::<id>("client");
-        let _: () = msg_send![*client, URLProtocolDidFinishLoading: this];
-    }
-}
-
-fn main() -> wry::Result<()> {
     //Unspeakable black magic to enable request interception for http(s)
     unsafe {
         let cls = class!(WKBrowsingContextController);
@@ -161,6 +199,10 @@ fn main() -> wry::Result<()> {
     unsafe {
         let _: () = msg_send![class!(NSURLProtocol), registerClass: cls];
     }
+}
+
+fn main() -> wry::Result<()> {
+    setup();
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().with_visible(true).build(&event_loop)?;
@@ -175,23 +217,33 @@ fn main() -> wry::Result<()> {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
+        //MacOS screenshotting
         //TODO: Move into a public method for screenshotting the webview
-        unsafe {
-            let webview: id = webview.webview();
-            let block = ConcreteBlock::new(|image: id, _error: id| {
-                let _image_data: id = msg_send![image, TIFFRepresentation];
-                // TODO: Somehow return the image data as bytes, probably taking inspiration
-                // from NSString::to_str()
+        // unsafe {
+        // let webview: id = webview.webview();
+        // let block = ConcreteBlock::new(|image: id, _error: id| {
+        // let _image_data: id = msg_send![image, TIFFRepresentation];
+        // TODO: Somehow return the image data as bytes, probably taking inspiration
+        // from NSString::to_str()
 
-                // TODO: Support other image formats
-                // https://developer.apple.com/documentation/appkit/nsbitmapimagerep/1395458-representation
-                // https://developer.apple.com/forums/thread/66779
-            });
-            // let conf: id = msg_send![class!(WKSnapshotConfiguration), alloc];
-            // let conf: id = msg_send![conf, init];
-            // let _: () =
-            //     msg_send![webview, takeSnapshotWithConfiguration: conf completionHandler: block];
-        }
+        // TODO: Support other image formats
+        // https://developer.apple.com/documentation/appkit/nsbitmapimagerep/1395458-representation
+        // https://developer.apple.com/forums/thread/66779
+        // });
+        // let conf: id = msg_send![class!(WKSnapshotConfiguration), alloc];
+        // let conf: id = msg_send![conf, init];
+        // let _: () =
+        //     msg_send![webview, takeSnapshotWithConfiguration: conf completionHandler: block];
+        // }
+
+        // Linux screenshotting
+        // if let Some(window) = webview.window().gtk_window().window() {
+        //     let inner_size = webview.window().inner_size();
+        //     window
+        //         .pixbuf(0, 0, inner_size.width as i32, inner_size.height as i32)
+        //         .unwrap()
+        //         .savev(Path::new("/workspace/test.jpg"), "jpeg", &[]);
+        // }
 
         match event {
             Event::NewEvents(StartCause::Init) => {
@@ -220,10 +272,13 @@ fn main() -> wry::Result<()> {
 }
 
 //NSString implementation borrowed from Wry
+#[cfg(target_os = "macos")]
 const UTF8_ENCODING: usize = 4;
+#[cfg(target_os = "macos")]
 
 struct NSString(id);
 
+#[cfg(target_os = "macos")]
 impl NSString {
     fn new(s: &str) -> Self {
         // Safety: objc runtime calls are unsafe
