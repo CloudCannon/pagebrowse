@@ -11,8 +11,7 @@ RUN apk --update upgrade && apk --no-cache add \
 	binutils \
 	sudo \
 	pkgconfig \
-	webkit2gtk-4.1 \
-	webkit2gtk-4.1-dev \
+	webkit2gtk-5.0-dev \
 	libappindicator \
 	gtk4.0-dev \
 	build-base \

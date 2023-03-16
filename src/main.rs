@@ -8,6 +8,22 @@
 use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::{ffi::c_char, slice, str};
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use webkit2gtk::WebContextExt;
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use webkit2gtk::WebViewExt;
 use wry::{
     application::{
         dpi::PhysicalSize,
@@ -22,14 +38,6 @@ use wry::{
 use block::ConcreteBlock;
 #[cfg(target_os = "macos")]
 use cocoa::base::{id, NO, YES};
-#[cfg(any(
-    target_os = "linux",
-    target_os = "dragonfly",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-use gtk::prelude::*;
 #[cfg(target_os = "macos")]
 use objc::{
     class,
@@ -46,6 +54,14 @@ use objc::{
     target_os = "openbsd"
 ))]
 use tao::platform::unix::WindowExtUnix;
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use wry::webview::WebviewExtUnix;
 
 #[cfg(target_os = "macos")]
 use wry::webview::WebviewExtMacOS;
@@ -213,6 +229,19 @@ fn main() -> wry::Result<()> {
             true
         })
         .build()?;
+
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    webview
+        .webview()
+        .web_context()
+        .unwrap()
+        .set_web_extensions_directory("crates/gtk-plugin/target/debug");
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;

@@ -1,0 +1,14 @@
+[package]
+name = "gtk-plugin"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+webkit2gtk5-webextension = { version = "*", features = ["v2_26"] }
+webkit2gtk5-webextension-sys = "*"
+glib = "*"

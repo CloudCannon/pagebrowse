@@ -11,6 +11,7 @@ wry = { version = "0.27", default-features = false, features = ["protocol"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.16"
 tao = { version = "0.18.0", default-features = false, features = ["serde"] }
+webkit2gtk = "*"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2.7"
