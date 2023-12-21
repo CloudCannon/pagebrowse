@@ -8,6 +8,12 @@
 use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::{ffi::c_char, slice, str};
+use tao::event::Event;
+use tao::event::StartCause;
+use tao::event::WindowEvent;
+use tao::event_loop::ControlFlow;
+use tao::event_loop::EventLoop;
+use tao::window::WindowBuilder;
 #[cfg(any(
     target_os = "linux",
     target_os = "dragonfly",
@@ -24,15 +30,7 @@ use webkit2gtk::WebContextExt;
     target_os = "openbsd"
 ))]
 use webkit2gtk::WebViewExt;
-use wry::{
-    application::{
-        dpi::PhysicalSize,
-        event::{Event, StartCause, WindowEvent},
-        event_loop::{ControlFlow, EventLoop},
-        window::WindowBuilder,
-    },
-    webview::WebViewBuilder,
-};
+use wry::WebViewBuilder;
 
 #[cfg(target_os = "macos")]
 use block::ConcreteBlock;
@@ -61,10 +59,11 @@ use tao::platform::unix::WindowExtUnix;
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
-use wry::webview::WebviewExtUnix;
+use wry::WebViewExtUnix;
 
+use wry::raw_window_handle::HasRawWindowHandle;
 #[cfg(target_os = "macos")]
-use wry::webview::WebviewExtMacOS;
+use wry::WebViewExtMacOS;
 
 #[cfg(any(
     target_os = "linux",
@@ -217,18 +216,23 @@ fn setup() {
     }
 }
 
-fn main() -> wry::Result<()> {
+fn main() {
     setup();
 
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().with_visible(true).build(&event_loop)?;
-    let webview = WebViewBuilder::new(window)?
+    let window = WindowBuilder::new()
+        .with_visible(true)
+        .build(&event_loop)
+        .expect("Window should be created");
+
+    let webview = WebViewBuilder::new(&window)
         //TODO: Add config options for allowing/preventing page navigation
         .with_navigation_handler(|url| {
             println!("Navigating to {url}");
             true
         })
-        .build()?;
+        .build()
+        .expect("Webview should create successfully");
 
     #[cfg(any(
         target_os = "linux",
@@ -287,9 +291,10 @@ fn main() -> wry::Result<()> {
                     .expect("Failed to eval script");
 
                 //TODO: Move into a public method for resizing the webview
-                webview
-                    .window()
-                    .set_inner_size(PhysicalSize::new(1024, 720));
+                //TODO: wry 0.35.0 — Webview::inner_size is removed
+                // webview
+                //     .window()
+                //     .set_inner_size(PhysicalSize::new(1024, 720));
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
