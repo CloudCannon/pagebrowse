@@ -8,6 +8,7 @@
 use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::{ffi::c_char, slice, str};
+use tao::dpi::PhysicalSize;
 use tao::event::Event;
 use tao::event::StartCause;
 use tao::event::WindowEvent;
@@ -291,10 +292,7 @@ fn main() {
                     .expect("Failed to eval script");
 
                 //TODO: Move into a public method for resizing the webview
-                //TODO: wry 0.35.0 — Webview::inner_size is removed
-                // webview
-                //     .window()
-                //     .set_inner_size(PhysicalSize::new(1024, 720));
+                window.set_inner_size(PhysicalSize::new(500, 1000));
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,

@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 wry = { version = "0.35", default-features = false, features = ["protocol"] }
 tao = { version = "0.24", default-features = false, features = [
-    "rwh_05", # wry crate currently pins to this non-default raw window handle crate version
+    "rwh_05", # wry crate currently pins to this non-default raw window handle crate version in their examples
     "serde",
 ] }
 
