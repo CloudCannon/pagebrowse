@@ -7,10 +7,13 @@ edition = "2021"
 
 [dependencies]
 wry = { version = "0.35", default-features = false, features = ["protocol"] }
-tao = { version = "0.18.0", default-features = false, features = ["serde"] }
+tao = { version = "0.24", default-features = false, features = [
+    "rwh_05", # wry crate currently pins to this non-default raw window handle crate version
+    "serde",
+] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-gtk = "0.16"
+gtk = "0.18"
 webkit2gtk = "*"
 
 [target.'cfg(target_os = "macos")'.dependencies]
