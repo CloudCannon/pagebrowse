@@ -286,6 +286,8 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
                 .get_assigned_window(window_id)
                 .expect("Consumer is behaving");
 
+            // TODO: use evaluate_script_with_callback and
+            // return the script result through the channel
             match window_in_pool.webview.evaluate_script(&script) {
                 Ok(()) => {}
                 Err(e) => eprintln!("{e}"),
