@@ -52,6 +52,7 @@ impl Pool {
                     .build(&event_loop)
                     .expect("Window should be created");
 
+                // TODO: Add .with_on_page_load_handler(handler) to the below
                 let webview = WebViewBuilder::new(&window)
                     //TODO: Add config options for allowing/preventing page navigation
                     .with_navigation_handler(move |url| {
