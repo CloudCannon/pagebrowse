@@ -267,8 +267,8 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
                 .window
                 .set_inner_size(PhysicalSize::new(width as u32, height as u32));
 
-            let x = (window_in_pool.assigned_to.unwrap() % 10) * 180;
-            let y = (window_in_pool.assigned_to.unwrap() / 10) * 800;
+            let x = (window_in_pool.assigned_to.unwrap() % 4) * 1920 / 2;
+            let y = ((window_in_pool.assigned_to.unwrap() / 4) % 4) * 1080 / 2;
 
             window_in_pool
                 .window
@@ -307,12 +307,10 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
 
             let screenshot_callback = move |bytes: &[u8]| {
                 eprintln!("Called back the bytes");
-                let reader = image::io::Reader::new(std::io::Cursor::new(bytes))
-                    .with_guessed_format()
-                    .expect("Cursor io never fails");
-                let image = reader.decode().unwrap();
+                std::fs::write(path.clone(), bytes).unwrap();
+                // let image = image::load_from_memory(bytes).expect("Cursor io never fails");
 
-                image.save(path.clone()).unwrap();
+                // image.save(path.clone()).unwrap();
 
                 outgoing_tx
                     .send(PBResponse {

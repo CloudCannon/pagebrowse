@@ -1,7 +1,7 @@
 pub use std::{ffi::c_char, slice, str};
-use std::{rc::Rc, sync::Mutex};
 
 pub use block::ConcreteBlock;
+use cocoa::base::nil;
 pub use cocoa::base::{id, NO, YES};
 pub use objc::{
     class,
@@ -42,6 +42,9 @@ impl super::PBPlatform for MacOSPlatform {
             let webview: id = webview.webview();
             let block = ConcreteBlock::new(move |image: id, _error: id| {
                 let image_data: id = msg_send![image, TIFFRepresentation];
+                let image_rep: id = msg_send![class!(NSBitmapImageRep), alloc];
+                let image_rep: id = msg_send![image_rep, initWithData:image_data];
+                let image_data: id = msg_send![image_rep, representationUsingType:4 properties:nil];
 
                 let len = msg_send![image_data, length];
                 let byte_ptr: *const u8 = msg_send![image_data, bytes];

@@ -6,3 +6,4 @@ members = [
     "crates/pagebrowse_lib",
     "crates/pagebrowse_manager",
 ]
+resolver = "2"
