@@ -34,24 +34,4 @@ async fn main() {
     println!("Done?");
 
     loop {}
-
-    // join_all(vec![
-    //     launch(PagebrowseOptions {
-    //         start_url: "https://cloudcannon.com/".into(),
-    //         window_visible: true,
-    //     }),
-    //     launch(PagebrowseOptions {
-    //         start_url: "https://pagefind.app/".into(),
-    //         window_visible: true,
-    //     }),
-    // ])
-    // .await;
 }
-
-// async fn launch(opts: PagebrowseOptions) {
-//     let mut window = PagebrowseApp::new(opts);
-
-//     while let Some(msg) = window.get_response().await {
-//         println!("Received {msg:#?}");
-//     }
-// }

@@ -48,13 +48,6 @@ impl super::PBPlatform for MacOSPlatform {
                 let bytes = slice::from_raw_parts(byte_ptr, len);
 
                 bytes_callback(bytes);
-
-                // TODO: Somehow return the image data as bytes, probably taking inspiration
-                // from NSString::to_str()
-
-                // TODO: Support other image formats
-                // https://developer.apple.com/documentation/appkit/nsbitmapimagerep/1395458-representation
-                // https://developer.apple.com/forums/thread/66779
             });
             let conf: id = msg_send![class!(WKSnapshotConfiguration), alloc];
             let conf: id = msg_send![conf, init];

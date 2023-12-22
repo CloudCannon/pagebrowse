@@ -187,19 +187,6 @@ fn main() {
                 eprintln!("Wry has started!");
 
                 start_listening(proxy.clone(), outgoing_tx.clone());
-
-                // pool.items.iter().for_each(|item| {
-                //     //TODO: Move into a public method for navigating the webview
-                //     item.webview.load_url("https://cloudcannon.com");
-
-                //     //TODO: Move into a public method for evaluating javascript
-                //     item.webview
-                //         .evaluate_script("document.body.prepend('🦀')")
-                //         .expect("Failed to eval script");
-
-                //     //TODO: Move into a public method for resizing the webview
-                //     item.window.set_inner_size(PhysicalSize::new(500, 1000));
-                // });
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
