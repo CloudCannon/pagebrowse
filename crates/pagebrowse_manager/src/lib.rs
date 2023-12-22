@@ -31,6 +31,10 @@ mod requests {
             window_id: u32,
             script: String,
         },
+        Screenshot {
+            window_id: u32,
+            path: String,
+        },
     }
 }
 

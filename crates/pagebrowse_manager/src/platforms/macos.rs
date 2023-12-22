@@ -1,4 +1,5 @@
 pub use std::{ffi::c_char, slice, str};
+use std::{rc::Rc, sync::Mutex};
 
 pub use block::ConcreteBlock;
 pub use cocoa::base::{id, NO, YES};
@@ -20,7 +21,7 @@ use crate::PBRequest;
 
 pub struct MacOSPlatform {}
 
-impl super::PlatformSetterUpper for MacOSPlatform {
+impl super::PBPlatform for MacOSPlatform {
     fn setup() -> EventLoop<Box<PBRequest>> {
         setup_macos();
 
@@ -33,6 +34,33 @@ impl super::PlatformSetterUpper for MacOSPlatform {
 
     fn enhance_webview(_webview: &wry::WebView) {
         /* no-op */
+    }
+
+    fn screenshot(webview: &wry::WebView, bytes_callback: impl Fn(&[u8]) -> ()) {
+        // MacOS screenshotting
+        unsafe {
+            let webview: id = webview.webview();
+            let block = ConcreteBlock::new(move |image: id, _error: id| {
+                let image_data: id = msg_send![image, TIFFRepresentation];
+
+                let len = msg_send![image_data, length];
+                let byte_ptr: *const u8 = msg_send![image_data, bytes];
+                let bytes = slice::from_raw_parts(byte_ptr, len);
+
+                bytes_callback(bytes);
+
+                // TODO: Somehow return the image data as bytes, probably taking inspiration
+                // from NSString::to_str()
+
+                // TODO: Support other image formats
+                // https://developer.apple.com/documentation/appkit/nsbitmapimagerep/1395458-representation
+                // https://developer.apple.com/forums/thread/66779
+            });
+            let conf: id = msg_send![class!(WKSnapshotConfiguration), alloc];
+            let conf: id = msg_send![conf, init];
+            let _: () =
+                msg_send![webview, takeSnapshotWithConfiguration: conf completionHandler: block];
+        }
     }
 }
 

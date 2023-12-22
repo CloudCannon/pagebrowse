@@ -1,21 +1,17 @@
-use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Write;
 use std::sync::mpsc::Sender;
-use std::time::Duration;
 
 use base64::engine::general_purpose;
 use base64::Engine;
 use pagebrowse_manager::options::get_cli_matches;
 use pagebrowse_manager::platforms;
-use pagebrowse_manager::platforms::PlatformSetterUpper;
+use pagebrowse_manager::platforms::PBPlatform;
 use pagebrowse_manager::PBRequest;
 use pagebrowse_manager::PBRequestPayload;
 use pagebrowse_manager::PBResponse;
 use pagebrowse_manager::PBResponsePayload;
-use tao::event_loop::EventLoopBuilder;
 use tao::event_loop::EventLoopProxy;
-use tao::platform::macos::EventLoopExtMacOS;
 use tao::window::Window;
 use wry::WebView;
 
@@ -216,7 +212,7 @@ fn main() {
 
 fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBResponse>) {
     eprintln!("===\nHandling the message: {msg:#?}\n===");
-    let message_id = msg.message_id;
+    let message_id = msg.message_id.expect("Inbound requests have a message ID");
 
     match msg.payload {
         PBRequestPayload::Tester(string) => {
@@ -245,7 +241,7 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
 
             outgoing_tx
                 .send(PBResponse {
-                    message_id,
+                    message_id: Some(message_id),
                     payload: PBResponsePayload::NewWindowCreated { id: assigned_to },
                 })
                 .expect("handle this error one day");
@@ -262,7 +258,7 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
 
             outgoing_tx
                 .send(PBResponse {
-                    message_id,
+                    message_id: Some(message_id),
                     payload: PBResponsePayload::OperationComplete,
                 })
                 .expect("handle this error one day");
@@ -282,7 +278,7 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
 
             outgoing_tx
                 .send(PBResponse {
-                    message_id,
+                    message_id: Some(message_id),
                     payload: PBResponsePayload::OperationComplete,
                 })
                 .expect("handle this error one day");
@@ -299,38 +295,34 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
 
             outgoing_tx
                 .send(PBResponse {
-                    message_id,
+                    message_id: Some(message_id),
                     payload: PBResponsePayload::OperationComplete,
                 })
                 .expect("handle this error one day");
         }
+        PBRequestPayload::Screenshot { window_id, path } => {
+            let window_in_pool = pool
+                .get_assigned_window(window_id)
+                .expect("Consumer is behaving");
+
+            let screenshot_callback = move |bytes: &[u8]| {
+                eprintln!("Called back the bytes");
+                let reader = image::io::Reader::new(std::io::Cursor::new(bytes))
+                    .with_guessed_format()
+                    .expect("Cursor io never fails");
+                let image = reader.decode().unwrap();
+
+                image.save(path.clone()).unwrap();
+
+                outgoing_tx
+                    .send(PBResponse {
+                        message_id: Some(message_id),
+                        payload: PBResponsePayload::OperationComplete,
+                    })
+                    .expect("handle this error one day");
+            };
+
+            platforms::Platform::screenshot(&window_in_pool.webview, screenshot_callback);
+        }
     };
 }
-
-//MacOS screenshotting
-//TODO: Move into a public method for screenshotting the webview
-// unsafe {
-// let webview: id = webview.webview();
-// let block = ConcreteBlock::new(|image: id, _error: id| {
-// let _image_data: id = msg_send![image, TIFFRepresentation];
-// TODO: Somehow return the image data as bytes, probably taking inspiration
-// from NSString::to_str()
-
-// TODO: Support other image formats
-// https://developer.apple.com/documentation/appkit/nsbitmapimagerep/1395458-representation
-// https://developer.apple.com/forums/thread/66779
-// });
-// let conf: id = msg_send![class!(WKSnapshotConfiguration), alloc];
-// let conf: id = msg_send![conf, init];
-// let _: () =
-//     msg_send![webview, takeSnapshotWithConfiguration: conf completionHandler: block];
-// }
-
-// Linux screenshotting
-// if let Some(window) = webview.window().gtk_window().window() {
-//     let inner_size = webview.window().inner_size();
-//     window
-//         .pixbuf(0, 0, inner_size.width as i32, inner_size.height as i32)
-//         .unwrap()
-//         .savev(Path::new("/workspace/test.jpg"), "jpeg", &[]);
-// }

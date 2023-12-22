@@ -24,7 +24,8 @@ use tao::event_loop::EventLoop;
 
 use crate::PBRequest;
 
-pub trait PlatformSetterUpper {
+pub trait PBPlatform {
     fn setup() -> EventLoop<Box<PBRequest>>;
     fn enhance_webview(webview: &wry::WebView);
+    fn screenshot(webview: &wry::WebView, bytes_callback: impl Fn(&[u8]) -> ());
 }

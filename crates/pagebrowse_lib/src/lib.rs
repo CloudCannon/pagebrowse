@@ -212,4 +212,19 @@ impl PagebrowserWindow {
             _ => Err(PagebrowseError::Unknown),
         }
     }
+
+    pub async fn screenshot(&self, path: String) -> Result<(), PagebrowseError> {
+        let response = self
+            .browser
+            .send_command(PBRequestPayload::Screenshot {
+                window_id: self.id,
+                path,
+            })
+            .await?;
+
+        match response {
+            PBResponsePayload::OperationComplete => Ok(()),
+            _ => Err(PagebrowseError::Unknown),
+        }
+    }
 }

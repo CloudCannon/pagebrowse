@@ -27,6 +27,9 @@ async fn main() {
         .evaluate_script("document.querySelector(`h1`).innerText = `🦀 🦀 🦀 🦀`;".into())
         .await
         .unwrap();
+    sleep(Duration::from_millis(100)).await;
+
+    window.screenshot("wowza.webp".into()).await.unwrap();
 
     println!("Done?");
 
