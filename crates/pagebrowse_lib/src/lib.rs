@@ -108,6 +108,7 @@ impl Pagebrowser {
         command: PBRequestPayload,
     ) -> Result<PBResponsePayload, PagebrowseError> {
         let mut inner = self.inner.lock().map_err(|_| PagebrowseError::Unknown)?;
+        let mut rxer = inner.rx_response.resubscribe();
 
         let this_message_id = inner.latest_message_id;
         let request = PBRequest {
@@ -124,7 +125,9 @@ impl Pagebrowser {
             stdin.flush().await.unwrap();
         }
 
-        while let Ok(response) = inner.rx_response.recv().await {
+        drop(inner);
+
+        while let Ok(response) = rxer.recv().await {
             if response.message_id == Some(this_message_id) {
                 return Ok(response.payload);
             }

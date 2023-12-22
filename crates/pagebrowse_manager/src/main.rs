@@ -11,6 +11,8 @@ use pagebrowse_manager::PBRequest;
 use pagebrowse_manager::PBRequestPayload;
 use pagebrowse_manager::PBResponse;
 use pagebrowse_manager::PBResponsePayload;
+use tao::dpi::PhysicalPosition;
+use tao::dpi::Position;
 use tao::event_loop::EventLoopProxy;
 use tao::window::Window;
 use wry::WebView;
@@ -225,6 +227,7 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
                 is_active: true,
                 pool_index,
             });
+            item.assigned_to = Some(assigned_to);
 
             outgoing_tx
                 .send(PBResponse {
@@ -262,6 +265,13 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
             window_in_pool
                 .window
                 .set_inner_size(PhysicalSize::new(width as u32, height as u32));
+
+            let x = (window_in_pool.assigned_to.unwrap() % 10) * 180;
+            let y = (window_in_pool.assigned_to.unwrap() / 10) * 800;
+
+            window_in_pool
+                .window
+                .set_outer_position(PhysicalPosition::new(x as u32, y as u32));
 
             outgoing_tx
                 .send(PBResponse {
