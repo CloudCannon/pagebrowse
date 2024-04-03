@@ -1,9 +1,4 @@
-use std::{
-    borrow::Borrow,
-    collections::HashMap,
-    process::Stdio,
-    sync::{Arc, Mutex},
-};
+use std::{borrow::Borrow, collections::HashMap, process::Stdio, sync::Arc};
 
 use base64::{engine::general_purpose, Engine};
 use pagebrowse_manager::{PBRequest, PBRequestPayload, PBResponse, PBResponsePayload};
@@ -12,8 +7,11 @@ use tokio::{
     io::AsyncBufReadExt,
     io::{AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, Command},
-    sync::broadcast,
-    sync::mpsc::{error::SendError, unbounded_channel, UnboundedReceiver, UnboundedSender},
+    sync::{
+        broadcast,
+        mpsc::{error::SendError, unbounded_channel, UnboundedReceiver, UnboundedSender},
+        Mutex,
+    },
 };
 
 #[derive(Error, Debug)]
@@ -107,7 +105,7 @@ impl Pagebrowser {
         &self,
         command: PBRequestPayload,
     ) -> Result<PBResponsePayload, PagebrowseError> {
-        let mut inner = self.inner.lock().map_err(|_| PagebrowseError::Unknown)?;
+        let mut inner = self.inner.lock().await;
         let mut rxer = inner.rx_response.resubscribe();
 
         let this_message_id = inner.latest_message_id;
