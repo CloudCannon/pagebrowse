@@ -17,15 +17,15 @@ use tao::{
 };
 pub use wry::WebViewExtMacOS;
 
-use crate::PBRequest;
+use crate::PBEvent;
 
 pub struct MacOSPlatform {}
 
 impl super::PBPlatform for MacOSPlatform {
-    fn setup() -> EventLoop<Box<PBRequest>> {
+    fn setup() -> EventLoop<Box<PBEvent>> {
         setup_macos();
 
-        let mut event_loop = EventLoopBuilder::<Box<PBRequest>>::with_user_event().build();
+        let mut event_loop = EventLoopBuilder::<Box<PBEvent>>::with_user_event().build();
 
         event_loop.set_activation_policy(tao::platform::macos::ActivationPolicy::Accessory);
 

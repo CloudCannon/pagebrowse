@@ -22,10 +22,10 @@ pub use macos::MacOSPlatform as Platform;
 // pub use linux::LinuxPlatform as Platform;
 use tao::event_loop::EventLoop;
 
-use crate::PBRequest;
+use crate::PBEvent;
 
 pub trait PBPlatform {
-    fn setup() -> EventLoop<Box<PBRequest>>;
+    fn setup() -> EventLoop<Box<PBEvent>>;
     fn enhance_webview(webview: &wry::WebView);
     fn screenshot(webview: &wry::WebView, bytes_callback: impl Fn(&[u8]) -> ());
 }

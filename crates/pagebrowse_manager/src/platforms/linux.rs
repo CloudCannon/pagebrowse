@@ -9,8 +9,8 @@ pub use wry::WebViewExtUnix;
 pub struct LinuxPlatform {}
 
 impl super::PBPlatform for LinuxPlatform {
-    fn setup() -> EventLoop<Box<PBRequest>> {
-        let event_loop = EventLoopBuilder::<Box<PBRequest>>::with_user_event().build();
+    fn setup() -> EventLoop<Box<PBEvent>> {
+        let event_loop = EventLoopBuilder::<Box<PBEvent>>::with_user_event().build();
 
         // TODO: Ability to hide from some kind of visibility
 

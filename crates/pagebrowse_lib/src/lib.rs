@@ -160,9 +160,7 @@ impl Pagebrowser {
     }
 
     pub async fn get_window(&self) -> Result<PagebrowserWindow, PagebrowseError> {
-        let window_response = self
-            .send_command(PBRequestPayload::NewWindow { start_url: None })
-            .await?;
+        let window_response = self.send_command(PBRequestPayload::NewWindow).await?;
 
         let PBResponsePayload::NewWindowCreated { id } = window_response else {
             return Err(PagebrowseError::Unknown);
@@ -181,12 +179,13 @@ pub struct PagebrowserWindow {
 }
 
 impl PagebrowserWindow {
-    pub async fn navigate(&self, url: String) -> Result<(), PagebrowseError> {
+    pub async fn navigate(&self, url: String, wait_for_load: bool) -> Result<(), PagebrowseError> {
         let response = self
             .browser
             .send_command(PBRequestPayload::Navigate {
                 window_id: self.id,
                 url,
+                wait_for_load,
             })
             .await?;
 

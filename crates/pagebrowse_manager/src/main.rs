@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Write;
 use std::sync::mpsc::Sender;
@@ -7,14 +8,18 @@ use base64::Engine;
 use pagebrowse_manager::options::get_cli_matches;
 use pagebrowse_manager::platforms;
 use pagebrowse_manager::platforms::PBPlatform;
+use pagebrowse_manager::PBEvent;
+use pagebrowse_manager::PBHook;
 use pagebrowse_manager::PBRequest;
 use pagebrowse_manager::PBRequestPayload;
 use pagebrowse_manager::PBResponse;
 use pagebrowse_manager::PBResponsePayload;
+use pagebrowse_manager::PBWebviewEvent;
 use tao::dpi::PhysicalPosition;
 use tao::dpi::Position;
 use tao::event_loop::EventLoopProxy;
 use tao::window::Window;
+use wry::PageLoadEvent;
 use wry::WebView;
 
 use tao::dpi::PhysicalSize;
@@ -27,10 +32,15 @@ use tao::window::WindowBuilder;
 
 use wry::WebViewBuilder;
 
+enum PoolEvent {
+    PageLoad { inner: PageLoadEvent, url: String },
+}
+
 struct PoolItem {
     window: Window,
     webview: WebView,
     assigned_to: Option<u32>,
+    pending_responses: HashMap<PBWebviewEvent, PBResponse>,
 }
 
 struct WindowReference {
@@ -44,7 +54,12 @@ struct Pool {
 }
 
 impl Pool {
-    fn new(count: usize, visible: bool, event_loop: &EventLoop<Box<PBRequest>>) -> Self {
+    fn new(
+        count: usize,
+        visible: bool,
+        event_loop: &EventLoop<Box<PBEvent>>,
+        proxy: EventLoopProxy<Box<PBEvent>>,
+    ) -> Self {
         let pool_items: Vec<PoolItem> = (0..count)
             .map(|i| {
                 let window = WindowBuilder::new()
@@ -53,11 +68,31 @@ impl Pool {
                     .expect("Window should be created");
 
                 // TODO: Add .with_on_page_load_handler(handler) to the below
+                let this_proxy = proxy.clone();
                 let webview = WebViewBuilder::new(&window)
                     //TODO: Add config options for allowing/preventing page navigation
                     .with_navigation_handler(move |url| {
                         eprintln!("Webview {i} is navigating to {url}");
                         true
+                    })
+                    .with_on_page_load_handler(move |inner, url| {
+                        let hook = match inner {
+                            PageLoadEvent::Started => PBHook {
+                                pool_item: i as u32,
+                                event: PBWebviewEvent::PageLoadStart { url },
+                            },
+                            PageLoadEvent::Finished => PBHook {
+                                pool_item: i as u32,
+                                event: PBWebviewEvent::PageLoadFinish { url },
+                            },
+                        };
+
+                        if this_proxy
+                            .send_event(Box::new(PBEvent::Hook(hook)))
+                            .is_err()
+                        {
+                            panic!("todo");
+                        };
                     })
                     .build()
                     .expect("Webview should create successfully");
@@ -68,6 +103,7 @@ impl Pool {
                     window,
                     webview,
                     assigned_to: None,
+                    pending_responses: HashMap::new(),
                 }
             })
             .collect();
@@ -78,7 +114,7 @@ impl Pool {
         }
     }
 
-    fn get_assigned_window(&self, window_id: u32) -> Result<&PoolItem, ()> {
+    fn get_assigned_window(&mut self, window_id: u32) -> Result<&mut PoolItem, ()> {
         let window_assignment = self
             .assignments
             .get(window_id as usize)
@@ -88,13 +124,13 @@ impl Pool {
             unimplemented!("Add error type for reusing dead windows");
         }
 
-        let window_in_pool = self.items.get(window_assignment.pool_index).unwrap();
+        let window_in_pool = self.items.get_mut(window_assignment.pool_index).unwrap();
 
         Ok(window_in_pool)
     }
 }
 
-fn start_listening(proxy: EventLoopProxy<Box<PBRequest>>, outgoing_tx: Sender<PBResponse>) {
+fn start_listening(proxy: EventLoopProxy<Box<PBEvent>>, outgoing_tx: Sender<PBResponse>) {
     std::thread::spawn(move || {
         /*
            STDIN comms
@@ -126,7 +162,7 @@ fn start_listening(proxy: EventLoopProxy<Box<PBRequest>>, outgoing_tx: Sender<PB
 
             match serde_json::from_slice::<PBRequest>(&decoded) {
                 Ok(msg) => {
-                    _ = event_loop_proxy.send_event(Box::new(msg));
+                    _ = event_loop_proxy.send_event(Box::new(PBEvent::Request(msg)));
                 }
                 Err(e) => {
                     let error = match std::str::from_utf8(&decoded[..]) {
@@ -164,7 +200,12 @@ fn main() {
     let event_loop = platforms::Platform::setup();
     let proxy = event_loop.create_proxy();
 
-    let mut pool = Pool::new(*window_count, windows_are_visible, &event_loop);
+    let mut pool = Pool::new(
+        *window_count,
+        windows_are_visible,
+        &event_loop,
+        proxy.clone(),
+    );
 
     std::thread::spawn(move || {
         let mut stdout = std::io::stdout().lock();
@@ -183,8 +224,8 @@ fn main() {
         *control_flow = ControlFlow::Wait;
 
         match event {
-            Event::UserEvent(msg) => {
-                handle_message(*msg, &mut pool, outgoing_tx.clone());
+            Event::UserEvent(evt) => {
+                handle_event(*evt, &mut pool, outgoing_tx.clone());
             }
             Event::NewEvents(StartCause::Init) => {
                 eprintln!("Wry has started!");
@@ -200,8 +241,24 @@ fn main() {
     });
 }
 
+fn handle_event(evt: PBEvent, pool: &mut Pool, outgoing_tx: Sender<PBResponse>) {
+    match evt {
+        PBEvent::Request(msg) => handle_message(msg, pool, outgoing_tx),
+        PBEvent::Hook(hook) => handle_hook(hook, pool, outgoing_tx),
+    }
+}
+
+fn handle_hook(hook: PBHook, pool: &mut Pool, outgoing_tx: Sender<PBResponse>) {
+    let window_in_pool = pool
+        .get_assigned_window(hook.pool_item)
+        .expect("Consumer is behaving");
+
+    if let Some(resp) = window_in_pool.pending_responses.remove(&hook.event) {
+        outgoing_tx.send(resp).expect("handle this error one day");
+    }
+}
+
 fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBResponse>) {
-    eprintln!("===\nHandling the message: {msg:#?}\n===");
     let message_id = msg.message_id.expect("Inbound requests have a message ID");
 
     match msg.payload {
@@ -213,7 +270,7 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
                 })
                 .expect("Sendable");
         }
-        PBRequestPayload::NewWindow { start_url } => {
+        PBRequestPayload::NewWindow => {
             let Some((pool_index, item)) = pool
                 .items
                 .iter_mut()
@@ -237,22 +294,34 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
                 })
                 .expect("handle this error one day");
         }
-        PBRequestPayload::Navigate { window_id, url } => {
+        PBRequestPayload::Navigate {
+            window_id,
+            url,
+            wait_for_load,
+        } => {
             let window_in_pool = pool
                 .get_assigned_window(window_id)
                 .expect("Consumer is behaving");
 
+            let response = PBResponse {
+                message_id: Some(message_id),
+                payload: PBResponsePayload::OperationComplete,
+            };
+
+            if wait_for_load {
+                window_in_pool.pending_responses.insert(
+                    PBWebviewEvent::PageLoadFinish { url: url.clone() },
+                    response.clone(),
+                );
+            }
+
             window_in_pool.webview.load_url(&url);
 
-            // TODO: Wait for it to actually navigate
-            // DOMContentLoaded?
-
-            outgoing_tx
-                .send(PBResponse {
-                    message_id: Some(message_id),
-                    payload: PBResponsePayload::OperationComplete,
-                })
-                .expect("handle this error one day");
+            if !wait_for_load {
+                outgoing_tx
+                    .send(response)
+                    .expect("handle this error one day");
+            }
         }
         PBRequestPayload::ResizeWindow {
             window_id,

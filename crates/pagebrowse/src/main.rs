@@ -24,7 +24,7 @@ async fn main() -> Result<(), PagebrowseError> {
         windows
             .iter()
             .flatten()
-            .map(|window| window.navigate("https://cloudcannon.com/".into())),
+            .map(|window| window.navigate("https://cloudcannon.com/".into(), false)),
     )
     .await;
 

@@ -3,6 +3,24 @@ use serde::{Deserialize, Serialize};
 pub mod options;
 pub mod platforms;
 
+#[derive(Debug)]
+pub enum PBEvent {
+    Request(PBRequest),
+    Hook(PBHook),
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum PBWebviewEvent {
+    PageLoadStart { url: String },
+    PageLoadFinish { url: String },
+}
+
+#[derive(Debug, PartialEq)]
+pub struct PBHook {
+    pub pool_item: u32,
+    pub event: PBWebviewEvent,
+}
+
 mod requests {
     use super::*;
 
@@ -15,12 +33,11 @@ mod requests {
     #[derive(Debug, Serialize, Deserialize)]
     pub enum PBRequestPayload {
         Tester(String),
-        NewWindow {
-            start_url: Option<String>,
-        },
+        NewWindow,
         Navigate {
             window_id: u32,
             url: String,
+            wait_for_load: bool,
         },
         ResizeWindow {
             window_id: u32,
@@ -63,3 +80,4 @@ mod responses {
 
 pub use requests::*;
 pub use responses::*;
+use wry::PageLoadEvent;
