@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::HashMap, process::Stdio, sync::Arc};
+use std::{borrow::Borrow, collections::HashMap, path::PathBuf, process::Stdio, sync::Arc};
 
 use base64::{engine::general_purpose, Engine};
 use pagebrowse_manager::{PBRequest, PBRequestPayload, PBResponse, PBResponsePayload};
@@ -18,11 +18,14 @@ use tokio::{
 pub enum PagebrowseError {
     #[error("unknown error")]
     Unknown,
+    #[error("no manager available")]
+    NoManager,
 }
 
 pub struct PagebrowseBuilder {
     pool_size: usize,
     visible: bool,
+    manager_path: PathBuf,
 }
 
 impl PagebrowseBuilder {
@@ -30,6 +33,7 @@ impl PagebrowseBuilder {
         Self {
             pool_size,
             visible: false,
+            manager_path: "../../target/debug/pagebrowse_manager".into(),
         }
     }
 
@@ -38,12 +42,21 @@ impl PagebrowseBuilder {
         self
     }
 
+    pub fn manager_path(mut self, manager_path: impl Into<PathBuf>) -> Self {
+        self.manager_path = manager_path.into();
+        self
+    }
+
     pub fn build(self) -> Result<Pagebrowser, PagebrowseError> {
-        let PagebrowseBuilder { pool_size, visible } = self;
+        let PagebrowseBuilder {
+            pool_size,
+            visible,
+            manager_path,
+        } = self;
 
         let (tx_response, rx_response) = broadcast::channel::<PBResponse>(100);
 
-        let mut command = Command::new("../../target/debug/pagebrowse_manager");
+        let mut command = Command::new(manager_path);
         command.arg("--count").arg(pool_size.to_string());
 
         command.kill_on_drop(true);
@@ -53,7 +66,7 @@ impl PagebrowseBuilder {
 
         command.stdin(Stdio::piped()).stdout(Stdio::piped());
 
-        let mut child = command.spawn().map_err(|_| PagebrowseError::Unknown)?;
+        let mut child = command.spawn().map_err(|_| PagebrowseError::NoManager)?;
 
         let stdout = child.stdout.take().unwrap();
         tokio::spawn(async move {
