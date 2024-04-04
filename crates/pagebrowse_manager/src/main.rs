@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Write;
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use base64::engine::general_purpose;
 use base64::Engine;
@@ -157,7 +159,7 @@ fn start_listening(proxy: EventLoopProxy<Box<PBEvent>>, outgoing_tx: Sender<PBRe
                         },
                     })
                     .expect("Channel is open");
-                return;
+                continue;
             };
 
             match serde_json::from_slice::<PBRequest>(&decoded) {
@@ -211,7 +213,14 @@ fn main() {
         let mut stdout = std::io::stdout().lock();
 
         loop {
-            let msg = outgoing_rx.recv().unwrap();
+            let msg = match outgoing_rx.recv() {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("errored: {e}");
+                    continue;
+                }
+            };
+
             let encoded = general_purpose::STANDARD.encode(serde_json::to_vec(&msg).unwrap());
 
             stdout.write_all(encoded.as_bytes()).unwrap();
@@ -225,7 +234,7 @@ fn main() {
 
         match event {
             Event::UserEvent(evt) => {
-                handle_event(*evt, &mut pool, outgoing_tx.clone());
+                handle_event(*evt, &mut pool, outgoing_tx.clone(), proxy.clone());
             }
             Event::NewEvents(StartCause::Init) => {
                 eprintln!("Wry has started!");
@@ -241,14 +250,24 @@ fn main() {
     });
 }
 
-fn handle_event(evt: PBEvent, pool: &mut Pool, outgoing_tx: Sender<PBResponse>) {
+fn handle_event(
+    evt: PBEvent,
+    pool: &mut Pool,
+    outgoing_tx: Sender<PBResponse>,
+    proxy: EventLoopProxy<Box<PBEvent>>,
+) {
     match evt {
-        PBEvent::Request(msg) => handle_message(msg, pool, outgoing_tx),
-        PBEvent::Hook(hook) => handle_hook(hook, pool, outgoing_tx),
+        PBEvent::Request(msg) => handle_message(msg, pool, outgoing_tx, proxy),
+        PBEvent::Hook(hook) => handle_hook(hook, pool, outgoing_tx, proxy),
     }
 }
 
-fn handle_hook(hook: PBHook, pool: &mut Pool, outgoing_tx: Sender<PBResponse>) {
+fn handle_hook(
+    hook: PBHook,
+    pool: &mut Pool,
+    outgoing_tx: Sender<PBResponse>,
+    proxy: EventLoopProxy<Box<PBEvent>>,
+) {
     let window_in_pool = pool
         .get_assigned_window(hook.pool_item)
         .expect("Consumer is behaving");
@@ -258,7 +277,12 @@ fn handle_hook(hook: PBHook, pool: &mut Pool, outgoing_tx: Sender<PBResponse>) {
     }
 }
 
-fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBResponse>) {
+fn handle_message(
+    msg: PBRequest,
+    pool: &mut Pool,
+    outgoing_tx: Sender<PBResponse>,
+    proxy: EventLoopProxy<Box<PBEvent>>,
+) {
     let message_id = msg.message_id.expect("Inbound requests have a message ID");
 
     match msg.payload {
@@ -355,19 +379,17 @@ fn handle_message(msg: PBRequest, pool: &mut Pool, outgoing_tx: Sender<PBRespons
                 .get_assigned_window(window_id)
                 .expect("Consumer is behaving");
 
-            // TODO: use evaluate_script_with_callback and
-            // return the script result through the channel
-            match window_in_pool.webview.evaluate_script(&script) {
-                Ok(()) => {}
-                Err(e) => eprintln!("{e}"),
-            }
+            let res_callback = move |output: String| {
+                outgoing_tx
+                    .send(PBResponse {
+                        message_id: Some(message_id),
+                        payload: PBResponsePayload::ScriptEvaluated { output },
+                    })
+                    .expect("handle this error one day");
+            };
 
-            outgoing_tx
-                .send(PBResponse {
-                    message_id: Some(message_id),
-                    payload: PBResponsePayload::OperationComplete,
-                })
-                .expect("handle this error one day");
+            let js = format!("{script}\n");
+            platforms::Platform::run_js(&window_in_pool.webview, &js, res_callback);
         }
         PBRequestPayload::Screenshot { window_id, path } => {
             let window_in_pool = pool

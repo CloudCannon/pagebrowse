@@ -79,6 +79,7 @@ impl PagebrowseBuilder {
                 if buf.pop().is_none() {
                     // EOF Reached
                     // TODO: Handle the manager dying
+                    eprintln!("manager died");
                     break;
                 }
 
@@ -195,7 +196,10 @@ impl PagebrowserWindow {
         }
     }
 
-    pub async fn evaluate_script(&self, script: String) -> Result<(), PagebrowseError> {
+    pub async fn evaluate_script(
+        &self,
+        script: String,
+    ) -> Result<Option<serde_json::Value>, PagebrowseError> {
         let response = self
             .browser
             .send_command(PBRequestPayload::EvaluateScript {
@@ -205,7 +209,15 @@ impl PagebrowserWindow {
             .await?;
 
         match response {
-            PBResponsePayload::OperationComplete => Ok(()),
+            PBResponsePayload::ScriptEvaluated { output } => {
+                if output.is_empty() {
+                    return Ok(None);
+                }
+
+                serde_json::from_str::<serde_json::Value>(&output)
+                    .map(|v| Some(v))
+                    .map_err(|_e| PagebrowseError::Unknown)
+            }
             _ => Err(PagebrowseError::Unknown),
         }
     }

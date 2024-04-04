@@ -1,8 +1,8 @@
 pub use std::{ffi::c_char, slice, str};
 
 pub use block::ConcreteBlock;
-use cocoa::base::nil;
 pub use cocoa::base::{id, NO, YES};
+use cocoa::{base::nil, foundation::NSArray};
 pub use objc::{
     class,
     declare::ClassDecl,
@@ -56,6 +56,33 @@ impl super::PBPlatform for MacOSPlatform {
             let conf: id = msg_send![conf, init];
             let _: () =
                 msg_send![webview, takeSnapshotWithConfiguration: conf completionHandler: block];
+        }
+    }
+
+    fn run_js(webview: &wry::WebView, js: &str, output_callback: impl Fn(String) -> ()) {
+        // MacOS javascript evaluation
+        unsafe {
+            let webview: id = webview.webview();
+
+            let block = ConcreteBlock::new(move |output_value: id, _error: id| {
+                let mut result = String::new();
+
+                if output_value != nil {
+                    let serializer = class!(NSJSONSerialization);
+                    let json_ns_data: NSData = msg_send![serializer, dataWithJSONObject:output_value options:NS_JSON_WRITING_FRAGMENTS_ALLOWED error:nil];
+                    let json_string = NSString::from(json_ns_data);
+
+                    result = json_string.to_str().to_string();
+                }
+
+                output_callback(result)
+            });
+
+            let content_world: id = msg_send![class!(WKContentWorld), defaultClientWorld];
+
+            let args: id = msg_send![class!(NSDictionary), dictionary];
+
+            let _: () = msg_send![webview, callAsyncJavaScript:NSString::new(js) arguments:args inFrame:nil inContentWorld:content_world completionHandler:block];
         }
     }
 }
@@ -202,6 +229,9 @@ pub fn setup_macos() {
     }
 }
 
+//Also borrowed from Wry:
+const NS_JSON_WRITING_FRAGMENTS_ALLOWED: u64 = 4;
+
 //NSString implementation borrowed from Wry
 const UTF8_ENCODING: usize = 4;
 struct NSString(id);
@@ -237,3 +267,18 @@ impl NSString {
         self.0
     }
 }
+
+impl From<NSData> for NSString {
+    fn from(value: NSData) -> Self {
+        Self(unsafe {
+            let ns_string: id = msg_send![class!(NSString), alloc];
+            let ns_string: id = msg_send![ns_string, initWithData:value encoding:UTF8_ENCODING];
+            let _: () = msg_send![ns_string, autorelease];
+
+            ns_string
+        })
+    }
+}
+
+//NSData implementation borrowed from Wry
+struct NSData(id);

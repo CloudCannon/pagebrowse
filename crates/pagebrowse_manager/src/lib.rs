@@ -74,6 +74,9 @@ mod responses {
         NewWindowCreated {
             id: u32,
         },
+        ScriptEvaluated {
+            output: String,
+        },
         OperationComplete,
     }
 }
