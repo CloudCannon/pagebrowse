@@ -74,7 +74,7 @@ impl Pool {
                 let webview = WebViewBuilder::new(&window)
                     //TODO: Add config options for allowing/preventing page navigation
                     .with_navigation_handler(move |url| {
-                        eprintln!("Webview {i} is navigating to {url}");
+                        // eprintln!("Webview {i} is navigating to {url}");
                         true
                     })
                     .with_on_page_load_handler(move |inner, url| {
@@ -237,8 +237,6 @@ fn main() {
                 handle_event(*evt, &mut pool, outgoing_tx.clone(), proxy.clone());
             }
             Event::NewEvents(StartCause::Init) => {
-                eprintln!("Wry has started!");
-
                 start_listening(proxy.clone(), outgoing_tx.clone());
             }
             Event::WindowEvent {
