@@ -1,4 +1,6 @@
-use std::{borrow::Borrow, collections::HashMap, path::PathBuf, process::Stdio, sync::Arc};
+use std::{
+    borrow::Borrow, collections::HashMap, fmt::format, path::PathBuf, process::Stdio, sync::Arc,
+};
 
 use base64::{engine::general_purpose, Engine};
 use pagebrowse_manager::{PBRequest, PBRequestPayload, PBResponse, PBResponsePayload};
@@ -119,25 +121,27 @@ impl Pagebrowser {
         &self,
         command: PBRequestPayload,
     ) -> Result<PBResponsePayload, PagebrowseError> {
-        let mut inner = self.inner.lock().await;
-        let mut rxer = inner.rx_response.resubscribe();
+        let (this_message_id, mut rxer) = {
+            let mut inner = self.inner.lock().await;
+            let rxer = inner.rx_response.resubscribe();
 
-        let this_message_id = inner.latest_message_id;
-        let request = PBRequest {
-            message_id: Some(this_message_id),
-            payload: command,
+            let this_message_id = inner.latest_message_id;
+            let request = PBRequest {
+                message_id: Some(this_message_id),
+                payload: command,
+            };
+            inner.latest_message_id += 1;
+
+            let encoded = general_purpose::STANDARD.encode(serde_json::to_vec(&request).unwrap());
+
+            if let Some(stdin) = inner.child.stdin.as_mut() {
+                stdin.write_all(encoded.as_bytes()).await.unwrap();
+                stdin.write(b",").await.unwrap();
+                stdin.flush().await.unwrap();
+            }
+
+            (this_message_id, rxer)
         };
-        inner.latest_message_id += 1;
-
-        let encoded = general_purpose::STANDARD.encode(serde_json::to_vec(&request).unwrap());
-
-        if let Some(stdin) = inner.child.stdin.as_mut() {
-            stdin.write_all(encoded.as_bytes()).await.unwrap();
-            stdin.write(b",").await.unwrap();
-            stdin.flush().await.unwrap();
-        }
-
-        drop(inner);
 
         while let Ok(response) = rxer.recv().await {
             if response.message_id == Some(this_message_id) {
@@ -177,6 +181,25 @@ impl Pagebrowser {
 pub struct PagebrowserWindow {
     id: u32,
     browser: Pagebrowser,
+}
+
+impl Drop for PagebrowserWindow {
+    fn drop(&mut self) {
+        let window_id = self.id;
+        let browser_ref = self.browser.clone();
+
+        tokio::spawn(async move {
+            let response = browser_ref
+                .send_command(PBRequestPayload::ReleaseWindow { window_id })
+                .await
+                .expect("should be able to close windows");
+
+            match response {
+                PBResponsePayload::OperationComplete => {}
+                _ => panic!("Errored releasing a Pagebrowse window"),
+            }
+        });
+    }
 }
 
 impl PagebrowserWindow {

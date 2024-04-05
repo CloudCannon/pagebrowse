@@ -17,7 +17,7 @@ pub enum PBWebviewEvent {
 
 #[derive(Debug, PartialEq)]
 pub struct PBHook {
-    pub pool_item: u32,
+    pub pool_item: usize,
     pub event: PBWebviewEvent,
 }
 
@@ -34,6 +34,9 @@ mod requests {
     pub enum PBRequestPayload {
         Tester(String),
         NewWindow,
+        ReleaseWindow {
+            window_id: u32,
+        },
         Navigate {
             window_id: u32,
             url: String,

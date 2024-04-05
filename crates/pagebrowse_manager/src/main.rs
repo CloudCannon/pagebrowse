@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::io::BufRead;
 use std::io::Write;
 use std::sync::mpsc::Sender;
@@ -39,6 +40,7 @@ enum PoolEvent {
 }
 
 struct PoolItem {
+    id: usize,
     window: Window,
     webview: WebView,
     assigned_to: Option<u32>,
@@ -46,13 +48,14 @@ struct PoolItem {
 }
 
 struct WindowReference {
-    is_active: bool,
     pool_index: usize,
 }
 
 struct Pool {
     items: Vec<PoolItem>,
-    assignments: Vec<WindowReference>,
+    assignments: HashMap<u32, WindowReference>,
+    next_assignment: u32,
+    waiting_for_windows: VecDeque<u32>,
 }
 
 impl Pool {
@@ -80,11 +83,11 @@ impl Pool {
                     .with_on_page_load_handler(move |inner, url| {
                         let hook = match inner {
                             PageLoadEvent::Started => PBHook {
-                                pool_item: i as u32,
+                                pool_item: i,
                                 event: PBWebviewEvent::PageLoadStart { url },
                             },
                             PageLoadEvent::Finished => PBHook {
-                                pool_item: i as u32,
+                                pool_item: i,
                                 event: PBWebviewEvent::PageLoadFinish { url },
                             },
                         };
@@ -102,6 +105,7 @@ impl Pool {
                 platforms::Platform::enhance_webview(&webview);
 
                 PoolItem {
+                    id: i,
                     window,
                     webview,
                     assigned_to: None,
@@ -112,23 +116,36 @@ impl Pool {
 
         Self {
             items: pool_items,
-            assignments: vec![],
+            assignments: HashMap::new(),
+            next_assignment: 0,
+            waiting_for_windows: VecDeque::new(),
         }
     }
 
     fn get_assigned_window(&mut self, window_id: u32) -> Result<&mut PoolItem, ()> {
-        let window_assignment = self
-            .assignments
-            .get(window_id as usize)
-            .expect("Add error type for future ids");
-
-        if !window_assignment.is_active {
-            unimplemented!("Add error type for reusing dead windows");
-        }
+        let Some(window_assignment) = self.assignments.get(&window_id) else {
+            return Err(());
+        };
 
         let window_in_pool = self.items.get_mut(window_assignment.pool_index).unwrap();
 
         Ok(window_in_pool)
+    }
+
+    fn release_assigned_window(&mut self, window_id: u32) {
+        self.assignments.remove(&window_id);
+    }
+
+    fn assign_window(&mut self, pool_index: usize) -> u32 {
+        let window_id = self.next_assignment;
+        self.next_assignment += 1;
+
+        self.assignments
+            .insert(window_id, WindowReference { pool_index });
+
+        self.items.get_mut(pool_index).unwrap().assigned_to = Some(window_id);
+
+        window_id
     }
 }
 
@@ -267,8 +284,9 @@ fn handle_hook(
     proxy: EventLoopProxy<Box<PBEvent>>,
 ) {
     let window_in_pool = pool
-        .get_assigned_window(hook.pool_item)
-        .expect("Consumer is behaving");
+        .items
+        .get_mut(hook.pool_item)
+        .expect("Pool is behaving");
 
     if let Some(resp) = window_in_pool.pending_responses.remove(&hook.event) {
         outgoing_tx.send(resp).expect("handle this error one day");
@@ -299,15 +317,11 @@ fn handle_message(
                 .enumerate()
                 .find(|(_, item)| item.assigned_to.is_none())
             else {
-                unimplemented!("Handle the window queue")
+                pool.waiting_for_windows.push_back(message_id);
+                return;
             };
 
-            let assigned_to = pool.assignments.len() as u32;
-            pool.assignments.push(WindowReference {
-                is_active: true,
-                pool_index,
-            });
-            item.assigned_to = Some(assigned_to);
+            let assigned_to = pool.assign_window(pool_index);
 
             outgoing_tx
                 .send(PBResponse {
@@ -315,6 +329,35 @@ fn handle_message(
                     payload: PBResponsePayload::NewWindowCreated { id: assigned_to },
                 })
                 .expect("handle this error one day");
+        }
+        PBRequestPayload::ReleaseWindow { window_id } => {
+            let window_in_pool = pool
+                .get_assigned_window(window_id)
+                .expect("Consumer is behaving");
+
+            window_in_pool.assigned_to = None;
+            window_in_pool.pending_responses.clear();
+            let released_id = window_in_pool.id;
+
+            pool.release_assigned_window(window_id);
+
+            outgoing_tx
+                .send(PBResponse {
+                    message_id: Some(message_id),
+                    payload: PBResponsePayload::OperationComplete,
+                })
+                .expect("handle this error one day");
+
+            if let Some(waiting) = pool.waiting_for_windows.pop_front() {
+                let assigned_to = pool.assign_window(released_id);
+
+                outgoing_tx
+                    .send(PBResponse {
+                        message_id: Some(waiting),
+                        payload: PBResponsePayload::NewWindowCreated { id: assigned_to },
+                    })
+                    .expect("handle this error one day");
+            }
         }
         PBRequestPayload::Navigate {
             window_id,
