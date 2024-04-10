@@ -28,6 +28,7 @@ impl super::PBPlatform for MacOSPlatform {
         let mut event_loop = EventLoopBuilder::<Box<PBEvent>>::with_user_event().build();
 
         event_loop.set_activation_policy(tao::platform::macos::ActivationPolicy::Accessory);
+        event_loop.set_activate_ignoring_other_apps(false);
 
         event_loop
     }
