@@ -79,7 +79,7 @@ impl super::PBPlatform for MacOSPlatform {
                 output_callback(result)
             });
 
-            let content_world: id = msg_send![class!(WKContentWorld), defaultClientWorld];
+            let content_world: id = msg_send![class!(WKContentWorld), pageWorld];
 
             let args: id = msg_send![class!(NSDictionary), dictionary];
 

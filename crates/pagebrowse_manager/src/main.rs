@@ -11,6 +11,7 @@ use base64::Engine;
 use pagebrowse_manager::options::get_cli_matches;
 use pagebrowse_manager::platforms;
 use pagebrowse_manager::platforms::PBPlatform;
+use pagebrowse_manager::InitializationParams;
 use pagebrowse_manager::PBEvent;
 use pagebrowse_manager::PBHook;
 use pagebrowse_manager::PBRequest;
@@ -60,22 +61,21 @@ struct Pool {
 
 impl Pool {
     fn new(
-        count: usize,
-        visible: bool,
+        params: InitializationParams,
         event_loop: &EventLoop<Box<PBEvent>>,
         proxy: EventLoopProxy<Box<PBEvent>>,
     ) -> Self {
-        let pool_items: Vec<PoolItem> = (0..count)
+        let pool_items: Vec<PoolItem> = (0..params.pool_size)
             .map(|i| {
                 let window = WindowBuilder::new()
-                    .with_visible(visible)
+                    .with_visible(params.visible)
                     .build(&event_loop)
                     .expect("Window should be created");
 
                 // TODO: Add .with_on_page_load_handler(handler) to the below
                 let this_proxy = proxy.clone();
-                let webview = WebViewBuilder::new(&window)
-                    //TODO: Add config options for allowing/preventing page navigation
+
+                let mut builder = WebViewBuilder::new(&window)
                     .with_navigation_handler(move |url| {
                         // eprintln!("Webview {i} is navigating to {url}");
                         true
@@ -98,9 +98,13 @@ impl Pool {
                         {
                             panic!("todo");
                         };
-                    })
-                    .build()
-                    .expect("Webview should create successfully");
+                    });
+
+                if let Some(js) = &params.init_script {
+                    builder = builder.with_initialization_script(&js);
+                }
+
+                let webview = builder.build().expect("Webview should create successfully");
 
                 platforms::Platform::enhance_webview(&webview);
 
@@ -149,6 +153,51 @@ impl Pool {
     }
 }
 
+fn parse_buf_or_write_error(
+    buf: Vec<u8>,
+    outgoing_tx: &Sender<PBResponse>,
+) -> Result<PBRequest, ()> {
+    let Ok(decoded) = general_purpose::STANDARD.decode(buf) else {
+        outgoing_tx
+            .send(PBResponse {
+                message_id: None,
+                payload: PBResponsePayload::Error {
+                    original_message: None,
+                    message: "Unparseable message, not valid base64".into(),
+                },
+            })
+            .expect("Channel is open");
+        return Err(());
+    };
+
+    match serde_json::from_slice::<PBRequest>(&decoded) {
+        Ok(msg) => Ok(msg),
+        Err(e) => {
+            let error = match std::str::from_utf8(&decoded[..]) {
+                Ok(msg) => PBResponsePayload::Error {
+                    original_message: Some(msg.to_string()),
+                    message: format!("{e}"),
+                },
+                Err(_) => PBResponsePayload::Error {
+                    original_message: None,
+                    message:
+                        "Pagebrowse was unable to parse the message it was provided via the service"
+                            .to_string(),
+                },
+            };
+
+            outgoing_tx
+                .send(PBResponse {
+                    message_id: None,
+                    payload: error,
+                })
+                .expect("Channel is open");
+
+            Err(())
+        }
+    }
+}
+
 fn start_listening(proxy: EventLoopProxy<Box<PBEvent>>, outgoing_tx: Sender<PBResponse>) {
     std::thread::spawn(move || {
         /*
@@ -166,65 +215,58 @@ fn start_listening(proxy: EventLoopProxy<Box<PBEvent>>, outgoing_tx: Sender<PBRe
                 std::process::exit(0);
             }
 
-            let Ok(decoded) = general_purpose::STANDARD.decode(buf) else {
-                outgoing_tx
-                    .send(PBResponse {
-                        message_id: None,
-                        payload: PBResponsePayload::Error {
-                            original_message: None,
-                            message: "Unparseable message, not valid base64".into(),
-                        },
-                    })
-                    .expect("Channel is open");
-                continue;
-            };
-
-            match serde_json::from_slice::<PBRequest>(&decoded) {
-                Ok(msg) => {
-                    _ = event_loop_proxy.send_event(Box::new(PBEvent::Request(msg)));
-                }
-                Err(e) => {
-                    let error = match std::str::from_utf8(&decoded[..]) {
-                        Ok(msg) => PBResponsePayload::Error {
-                            original_message: Some(msg.to_string()),
-                            message: format!("{e}"),
-                        },
-                        Err(_) => PBResponsePayload::Error {
-                            original_message: None,
-                            message: "Pagefind was unable to parse the message it was provided via the service".to_string(),
-                        },
-                    };
-
-                    outgoing_tx
-                        .send(PBResponse {
-                            message_id: None,
-                            payload: error,
-                        })
-                        .expect("Channel is open");
-                }
+            if let Ok(msg) = parse_buf_or_write_error(buf, &outgoing_tx) {
+                _ = event_loop_proxy.send_event(Box::new(PBEvent::Request(msg)));
             }
         }
     });
 }
 
+fn listen_for_init(outgoing_tx: Sender<PBResponse>) -> InitializationParams {
+    let mut stdin = std::io::stdin().lock();
+
+    loop {
+        let mut buf = vec![];
+        stdin.read_until(b',', &mut buf).unwrap();
+        if buf.pop().is_none() {
+            // EOF Reached
+            std::process::exit(0);
+        }
+
+        if let Ok(msg) = parse_buf_or_write_error(buf, &outgoing_tx) {
+            match msg.payload {
+                PBRequestPayload::Initialize(params) => {
+                    outgoing_tx
+                        .send(PBResponse {
+                            message_id: msg.message_id,
+                            payload: PBResponsePayload::OperationComplete,
+                        })
+                        .expect("handle this error one day");
+
+                    return params;
+                }
+                _ => {
+                    outgoing_tx
+                    .send(PBResponse {
+                        message_id: msg.message_id,
+                        payload: PBResponsePayload::Error {
+                            original_message: None,
+                            message: "Initialize message has not been sent, Pagebrowse is not yet ready".into(),
+                        },
+                    })
+                    .expect("Channel is open");
+                }
+            }
+        }
+    }
+}
+
 fn main() {
-    let (outgoing_tx, mut outgoing_rx) = std::sync::mpsc::channel::<PBResponse>();
+    let (outgoing_tx, outgoing_rx) = std::sync::mpsc::channel::<PBResponse>();
 
-    let options = get_cli_matches();
-    let windows_are_visible = options.get_flag("visible");
-    let window_count = options
-        .get_one::<usize>("count")
-        .expect("window count is required");
-
-    let event_loop = platforms::Platform::setup();
-    let proxy = event_loop.create_proxy();
-
-    let mut pool = Pool::new(
-        *window_count,
-        windows_are_visible,
-        &event_loop,
-        proxy.clone(),
-    );
+    let _options = get_cli_matches();
+    // No options currently used
+    // TODO: Add CLI option for which communication method to use (network / stdio / etc)
 
     std::thread::spawn(move || {
         let mut stdout = std::io::stdout().lock();
@@ -245,6 +287,12 @@ fn main() {
             stdout.flush().unwrap();
         }
     });
+
+    let event_loop = platforms::Platform::setup();
+    let proxy = event_loop.create_proxy();
+
+    let intial_params = listen_for_init(outgoing_tx.clone());
+    let mut pool = Pool::new(intial_params, &event_loop, proxy.clone());
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -309,6 +357,17 @@ fn handle_message(
                     payload: PBResponsePayload::Tester(format!("Responding to [{string}]")),
                 })
                 .expect("Sendable");
+        }
+        PBRequestPayload::Initialize(_) => {
+            outgoing_tx
+                .send(PBResponse {
+                    message_id: msg.message_id,
+                    payload: PBResponsePayload::Error {
+                        original_message: None,
+                        message: "Pagebrowse is already initialized".into(),
+                    },
+                })
+                .expect("Channel is open");
         }
         PBRequestPayload::NewWindow => {
             let Some((pool_index, item)) = pool

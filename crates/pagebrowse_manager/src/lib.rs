@@ -21,6 +21,13 @@ pub struct PBHook {
     pub event: PBWebviewEvent,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct InitializationParams {
+    pub pool_size: usize,
+    pub visible: bool,
+    pub init_script: Option<String>,
+}
+
 mod requests {
     use super::*;
 
@@ -33,6 +40,7 @@ mod requests {
     #[derive(Debug, Serialize, Deserialize)]
     pub enum PBRequestPayload {
         Tester(String),
+        Initialize(InitializationParams),
         NewWindow,
         ReleaseWindow {
             window_id: u32,

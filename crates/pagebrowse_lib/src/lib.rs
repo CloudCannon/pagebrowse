@@ -3,7 +3,9 @@ use std::{
 };
 
 use base64::{engine::general_purpose, Engine};
-use pagebrowse_manager::{PBRequest, PBRequestPayload, PBResponse, PBResponsePayload};
+use pagebrowse_manager::{
+    InitializationParams, PBRequest, PBRequestPayload, PBResponse, PBResponsePayload,
+};
 use thiserror::Error;
 use tokio::{
     io::AsyncBufReadExt,
@@ -27,6 +29,7 @@ pub enum PagebrowseError {
 pub struct PagebrowseBuilder {
     pool_size: usize,
     visible: bool,
+    init_script: Option<String>,
     manager_path: PathBuf,
 }
 
@@ -35,6 +38,7 @@ impl PagebrowseBuilder {
         Self {
             pool_size,
             visible: false,
+            init_script: None,
             manager_path: "../../target/debug/pagebrowse_manager".into(),
         }
     }
@@ -49,23 +53,23 @@ impl PagebrowseBuilder {
         self
     }
 
-    pub fn build(self) -> Result<Pagebrowser, PagebrowseError> {
+    pub fn init_script(mut self, init_script: String) -> Self {
+        self.init_script = Some(init_script);
+        self
+    }
+
+    pub async fn build(self) -> Result<Pagebrowser, PagebrowseError> {
         let PagebrowseBuilder {
             pool_size,
             visible,
+            init_script,
             manager_path,
         } = self;
 
         let (tx_response, rx_response) = broadcast::channel::<PBResponse>(100);
 
         let mut command = Command::new(manager_path);
-        command.arg("--count").arg(pool_size.to_string());
-
         command.kill_on_drop(true);
-        if visible {
-            command.arg("--visible");
-        }
-
         command.stdin(Stdio::piped()).stdout(Stdio::piped());
 
         let mut child = command.spawn().map_err(|_| PagebrowseError::NoManager)?;
@@ -81,7 +85,6 @@ impl PagebrowseBuilder {
                 if buf.pop().is_none() {
                     // EOF Reached
                     // TODO: Handle the manager dying
-                    eprintln!("manager died");
                     break;
                 }
 
@@ -101,7 +104,18 @@ impl PagebrowseBuilder {
             }
         });
 
-        Ok(Pagebrowser::new(child, rx_response))
+        let browser = Pagebrowser::new(child, rx_response);
+
+        browser
+            .send_command(PBRequestPayload::Initialize(InitializationParams {
+                pool_size,
+                visible,
+                init_script,
+            }))
+            .await
+            .map_err(|_| PagebrowseError::Unknown)?;
+
+        Ok(browser)
     }
 }
 
