@@ -1,3 +1,5 @@
+extern crate gtk;
+
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::io::BufRead;
@@ -22,6 +24,7 @@ use pagebrowse_manager::PBWebviewEvent;
 use tao::dpi::PhysicalPosition;
 use tao::dpi::Position;
 use tao::event_loop::EventLoopProxy;
+use tao::platform::unix::WindowExtUnix;
 use tao::window::Window;
 use wry::PageLoadEvent;
 use wry::WebView;
@@ -35,6 +38,7 @@ use tao::event_loop::EventLoop;
 use tao::window::WindowBuilder;
 
 use wry::WebViewBuilder;
+use wry::WebViewBuilderExtUnix;
 
 enum PoolEvent {
     PageLoad { inner: PageLoadEvent, url: String },
@@ -75,7 +79,40 @@ impl Pool {
                 // TODO: Add .with_on_page_load_handler(handler) to the below
                 let this_proxy = proxy.clone();
 
+                #[cfg(target_os = "macos")]
                 let mut builder = WebViewBuilder::new(&window)
+                    .with_navigation_handler(move |url| {
+                        // eprintln!("Webview {i} is navigating to {url}");
+                        true
+                    })
+                    .with_on_page_load_handler(move |inner, url| {
+                        let hook = match inner {
+                            PageLoadEvent::Started => PBHook {
+                                pool_item: i,
+                                event: PBWebviewEvent::PageLoadStart { url },
+                            },
+                            PageLoadEvent::Finished => PBHook {
+                                pool_item: i,
+                                event: PBWebviewEvent::PageLoadFinish { url },
+                            },
+                        };
+
+                        if this_proxy
+                            .send_event(Box::new(PBEvent::Hook(hook)))
+                            .is_err()
+                        {
+                            panic!("todo");
+                        };
+                    });
+
+                #[cfg(any(
+                    target_os = "linux",
+                    target_os = "dragonfly",
+                    target_os = "freebsd",
+                    target_os = "netbsd",
+                    target_os = "openbsd"
+                ))]
+                let mut builder = WebViewBuilder::new_gtk(window.gtk_window())
                     .with_navigation_handler(move |url| {
                         // eprintln!("Webview {i} is navigating to {url}");
                         true
@@ -309,6 +346,11 @@ fn main() {
                 ..
             } => *control_flow = ControlFlow::Exit,
             _ => (),
+        };
+
+        #[cfg(target_os = "linux")]
+        while gtk::events_pending() {
+            gtk::main_iteration_do(false);
         }
     });
 }

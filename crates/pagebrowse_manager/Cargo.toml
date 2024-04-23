@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wry = { version = "0.35", default-features = false, features = ["protocol"] }
+wry = { version = "0.39", default-features = false, features = ["protocol", "os-webview"] }
 tao = { version = "0.24", default-features = false, features = [
-    "rwh_05", # wry crate currently pins to this non-default raw window handle crate version in their examples
+    "rwh_06",
     "serde",
 ] }
 clap = { version = "4", features = ["cargo"] }
@@ -17,9 +17,9 @@ serde = { version = "1", features = ["derive"] }
 base64 = "0.21"
 image = { version = "0.24.7", features = ["webp-encoder"] }
 
-# [target.'cfg(target_os = "linux")'.dependencies]
-# gtk = "0.18"
-# webkit2gtk = "*"
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "*"
+webkit2gtk = "*"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2.7"

@@ -4,12 +4,17 @@ pub use webkit2gtk::WebContextExt;
 pub use webkit2gtk::WebViewExt;
 
 pub use tao::platform::unix::WindowExtUnix;
+use tao::event_loop::{EventLoop, EventLoopBuilder};
 pub use wry::WebViewExtUnix;
+
+use crate::PBEvent;
 
 pub struct LinuxPlatform {}
 
 impl super::PBPlatform for LinuxPlatform {
     fn setup() -> EventLoop<Box<PBEvent>> {
+        
+        gtk::init().unwrap();
         let event_loop = EventLoopBuilder::<Box<PBEvent>>::with_user_event().build();
 
         // TODO: Ability to hide from some kind of visibility
@@ -25,14 +30,18 @@ impl super::PBPlatform for LinuxPlatform {
             .set_web_extensions_directory("target/debug");
     }
 
-    fn screenshot(webview: &wry::WebView) {
+    fn screenshot(webview: &wry::WebView, bytes_callback: impl Fn(&[u8]) -> ()) {
         // Linux screenshotting
-        if let Some(window) = webview.window().gtk_window().window() {
-            let inner_size = webview.window().inner_size();
-            window
-                .pixbuf(0, 0, inner_size.width as i32, inner_size.height as i32)
-                .unwrap()
-                .savev(Path::new("/workspace/test.jpg"), "jpeg", &[]);
-        }
+        // if let Some(window) = webview.window().gtk_window().window() {
+        //     let inner_size = webview.window().inner_size();
+        //     window
+        //         .pixbuf(0, 0, inner_size.width as i32, inner_size.height as i32)
+        //         .unwrap()
+        //         .savev(Path::new("/workspace/test.jpg"), "jpeg", &[]);
+        // }
+    }
+
+    fn run_js(webview: &wry::WebView, js: &str, output_callback: impl Fn(String) -> ()) {
+
     }
 }

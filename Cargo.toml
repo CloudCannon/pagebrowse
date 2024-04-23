@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "crates/gtk-plugin",
+    # "crates/gtk-plugin",
     "crates/pagebrowse",
     "crates/pagebrowse_lib",
     "crates/pagebrowse_manager",

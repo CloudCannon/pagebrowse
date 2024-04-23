@@ -5,8 +5,8 @@ use tokio::time::{sleep, Duration};
 #[tokio::main]
 async fn main() -> Result<(), PagebrowseError> {
     // TODO: Make parallel
-    let browser = PagebrowseBuilder::new(64).visible(true).build()?;
-    let windows = join_all((0..64).map(|_| browser.get_window()).collect::<Vec<_>>()).await;
+    let browser = PagebrowseBuilder::new(1).visible(true).build().await?;
+    let windows = join_all((0..1).map(|_| browser.get_window()).collect::<Vec<_>>()).await;
 
     // let browsers = (0..20)
     //     .map(|_| PagebrowseBuilder::new(1).visible(true).build())
