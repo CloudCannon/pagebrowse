@@ -1,5 +1,3 @@
-extern crate gtk;
-
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::io::BufRead;
@@ -24,7 +22,6 @@ use pagebrowse_manager::PBWebviewEvent;
 use tao::dpi::PhysicalPosition;
 use tao::dpi::Position;
 use tao::event_loop::EventLoopProxy;
-use tao::platform::unix::WindowExtUnix;
 use tao::window::Window;
 use wry::PageLoadEvent;
 use wry::WebView;
@@ -36,8 +33,11 @@ use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
 use tao::event_loop::EventLoop;
 use tao::window::WindowBuilder;
-
 use wry::WebViewBuilder;
+
+#[cfg(target_os = "linux")]
+use tao::platform::unix::WindowExtUnix;
+#[cfg(target_os = "linux")]
 use wry::WebViewBuilderExtUnix;
 
 enum PoolEvent {
