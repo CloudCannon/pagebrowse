@@ -80,30 +80,7 @@ impl Pool {
                 let this_proxy = proxy.clone();
 
                 #[cfg(target_os = "macos")]
-                let mut builder = WebViewBuilder::new(&window)
-                    .with_navigation_handler(move |url| {
-                        // eprintln!("Webview {i} is navigating to {url}");
-                        true
-                    })
-                    .with_on_page_load_handler(move |inner, url| {
-                        let hook = match inner {
-                            PageLoadEvent::Started => PBHook {
-                                pool_item: i,
-                                event: PBWebviewEvent::PageLoadStart { url },
-                            },
-                            PageLoadEvent::Finished => PBHook {
-                                pool_item: i,
-                                event: PBWebviewEvent::PageLoadFinish { url },
-                            },
-                        };
-
-                        if this_proxy
-                            .send_event(Box::new(PBEvent::Hook(hook)))
-                            .is_err()
-                        {
-                            panic!("todo");
-                        };
-                    });
+                let mut builder = WebViewBuilder::new(&window);
 
                 #[cfg(any(
                     target_os = "linux",
@@ -112,8 +89,12 @@ impl Pool {
                     target_os = "netbsd",
                     target_os = "openbsd"
                 ))]
-                let mut builder = WebViewBuilder::new_gtk(window.gtk_window())
-                    .with_navigation_handler(move |url| {
+                let mut builder = {
+                    let vbox = window.default_vbox().unwrap();
+                    WebViewBuilder::new_gtk(vbox)
+                };
+
+                builder = builder.with_navigation_handler(move |url| {
                         // eprintln!("Webview {i} is navigating to {url}");
                         true
                     })

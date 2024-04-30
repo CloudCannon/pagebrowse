@@ -1,11 +1,15 @@
 pub use std::path::Path;
 
+use gtk::gio::Cancellable;
+use gtk::prelude::WidgetExt;
 pub use webkit2gtk::WebContextExt;
 pub use webkit2gtk::WebViewExt;
 
 pub use tao::platform::unix::WindowExtUnix;
 use tao::event_loop::{EventLoop, EventLoopBuilder};
 pub use wry::WebViewExtUnix;
+
+use javascriptcore::ValueExt;
 
 use crate::PBEvent;
 
@@ -41,7 +45,15 @@ impl super::PBPlatform for LinuxPlatform {
         // }
     }
 
-    fn run_js(webview: &wry::WebView, js: &str, output_callback: impl Fn(String) -> ()) {
-
+    fn run_js(webview: &wry::WebView, js: &str, output_callback: impl Fn(String) -> () + 'static) {
+        webview.webview().call_async_javascript_function(js, None, None, None, Cancellable::NONE, move |res| {
+            let mut result = String::new();
+            if let Ok(output) = res {
+                if let Some(json) = output.to_json(0) {
+                    result = json.to_string();
+                }
+            }
+            output_callback(result);
+        });
     }
 }

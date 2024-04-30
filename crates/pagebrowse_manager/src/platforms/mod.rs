@@ -28,5 +28,5 @@ pub trait PBPlatform {
     fn setup() -> EventLoop<Box<PBEvent>>;
     fn enhance_webview(webview: &wry::WebView);
     fn screenshot(webview: &wry::WebView, bytes_callback: impl Fn(&[u8]) -> ());
-    fn run_js(webview: &wry::WebView, js: &str, output_callback: impl Fn(String) -> ());
+    fn run_js(webview: &wry::WebView, js: &str, output_callback: impl Fn(String) -> () + 'static);
 }

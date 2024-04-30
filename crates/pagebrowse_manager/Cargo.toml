@@ -19,7 +19,8 @@ image = { version = "0.24.7", features = ["webp-encoder"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "*"
-webkit2gtk = "*"
+webkit2gtk = { version = "2.0.1", features = ["v2_40"] }
+javascriptcore-rs = "*"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2.7"
