@@ -5,7 +5,7 @@ use tokio::time::{sleep, Duration};
 #[tokio::main]
 async fn main() -> Result<(), PagebrowseError> {
     // TODO: Make parallel
-    let browser = PagebrowseBuilder::new(1).visible(true).build().await?;
+    let browser = PagebrowseBuilder::new(1).visible(false).build().await?;
     let windows = join_all((0..1).map(|_| browser.get_window()).collect::<Vec<_>>()).await;
 
     // let browsers = (0..20)
@@ -24,7 +24,7 @@ async fn main() -> Result<(), PagebrowseError> {
         windows
             .iter()
             .flatten()
-            .map(|window| window.navigate("https://cloudcannon.com/".into(), false)),
+            .map(|window| window.navigate("https://pagefind.app/".into(), true)),
     )
     .await;
 
@@ -38,12 +38,16 @@ async fn main() -> Result<(), PagebrowseError> {
 
     sleep(Duration::from_millis(3000)).await;
 
-    join_all(windows.iter().flatten().enumerate().map(|(i, window)| {
+    let scripts = join_all(windows.iter().flatten().enumerate().map(|(i, window)| {
         window.evaluate_script(format!(
-            "document.querySelector(`h1`).innerText = `Window {i}`;"
+            "let v = document.querySelector(`h1`).innerText;\n\
+             document.querySelector(`h1`).innerText = `Window {i}`;\n\
+             return \"title was originally \" + v;"
         ))
     }))
     .await;
+
+    println!("{scripts:#?}");
 
     // window
     //     .evaluate_script("document.querySelector(`h1`).innerText = `🦀 🦀 🦀 🦀`;".into())
