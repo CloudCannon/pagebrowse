@@ -1,9 +1,0 @@
-[workspace]
-
-members = [
-    # "crates/gtk-plugin",
-    "crates/pagebrowse",
-    "crates/pagebrowse_app",
-    "crates/pagebrowse_manager",
-]
-resolver = "2"
