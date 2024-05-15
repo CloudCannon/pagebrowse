@@ -2,11 +2,16 @@
 name = "pagebrowse_manager"
 version = "0.1.0"
 edition = "2021"
+description = "Standalone webview manager required to use Pagebrowse"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wry = { version = "0.39", default-features = false, features = ["protocol", "os-webview"] }
+wry = { version = "0.39", default-features = false, features = [
+    "protocol",
+    "os-webview",
+] }
 tao = { version = "0.24", default-features = false, features = [
     "rwh_06",
     "serde",
