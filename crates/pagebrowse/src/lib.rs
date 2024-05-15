@@ -39,7 +39,7 @@ impl PagebrowseBuilder {
             pool_size,
             visible: false,
             init_script: None,
-            manager_path: "../../target/debug/pagebrowse_manager".into(),
+            manager_path: "pagebrowse_manager".into(),
         }
     }
 
