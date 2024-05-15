@@ -23,9 +23,9 @@ base64 = "0.21"
 image = { version = "0.24.7", features = ["webp-encoder"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-gtk = "*"
+gtk = "0"
 webkit2gtk = { version = "2.0.1", features = ["v2_40"] }
-javascriptcore-rs = "*"
+javascriptcore-rs = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2.7"
