@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use pagebrowse_types::{
+pub use pagebrowse_types::{
     InitializationParams, PBRequest, PBRequestPayload, PBResponse, PBResponsePayload,
 };
 
