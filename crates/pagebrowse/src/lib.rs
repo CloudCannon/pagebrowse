@@ -3,7 +3,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose, Engine};
-use pagebrowse_manager::{
+use pagebrowse_types::{
     InitializationParams, PBRequest, PBRequestPayload, PBResponse, PBResponsePayload,
 };
 use thiserror::Error;
